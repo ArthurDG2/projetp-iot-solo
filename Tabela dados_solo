@@ -1,0 +1,40 @@
+CREATE TABLE dados_solo (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+
+    -- Localização
+    latitude FLOAT,
+    longitude FLOAT,
+
+    -- Solo
+    temperatura_solo FLOAT,
+    umidade_solo FLOAT,
+    condutividade_solo FLOAT,
+    ph FLOAT,
+    npk_n FLOAT,
+    npk_p FLOAT,
+    npk_k FLOAT,
+
+    -- Atmosfera
+    temperatura_ar FLOAT,
+    pressao FLOAT,
+    altitude FLOAT,
+    umidade_relativa FLOAT,
+    radiacao_solar FLOAT,
+    indice_uv FLOAT,
+    velocidade_vento FLOAT,
+    pluviometria_mm FLOAT,
+
+    -- Planta
+    altura_planta FLOAT,
+    biomassa_estimada FLOAT,
+    area_foliar_lai FLOAT,
+
+    -- Dados agrícolas
+    cultura VARCHAR(50),
+    estagio_fenologico VARCHAR(50),
+    data_plantio DATE,
+    data_observacao DATETIME DEFAULT CURRENT_TIMESTAMP,
+
+    -- Produção
+    producao_kg FLOAT NULL
+);
