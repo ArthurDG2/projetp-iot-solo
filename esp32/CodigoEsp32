@@ -1,122 +1,76 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
-#include <OneWire.h>
-#include <DallasTemperature.h>
 
-// WiFi
 const char* ssid = "SEU_WIFI";
 const char* password = "SUA_SENHA";
+
 const char* serverName = "http://SEU_IP:5000/api/solo";
 
-// DS18B20
-#define ONE_WIRE_BUS 4
-OneWire oneWire(ONE_WIRE_BUS);
-DallasTemperature sensors(&oneWire);
-
-// Pinos (ajuste conforme seu circuito)
-const int PIN_SOIL_CAP = 34;   // ADC pin for capacitive soil moisture
-const int PIN_PH = 35;         // ADC pin for pH sensor
-const int PIN_EC = 32;         // ADC pin for conductivity (EC) sensor
-const int PIN_RAD = 33;        // ADC pin for solar radiation sensor (placeholder)
-const int PIN_ANEM = 25;       // digital pulse from anemometer (needs interrupt)
-const int PIN_PLUV = 26;       // digital pulse from pluviometer (needs interrupt)
-const int PIN_ALTITUDE = 0;    // placeholder if using BMP sensor via I2C
-
-volatile int anem_pulses = 0;
-volatile int pluv_pulses = 0;
-
-void IRAM_ATTR anemISR() { anem_pulses++; }
-void IRAM_ATTR pluvISR() { pluv_pulses++; }
-
-float readADC(int pin) {
-  int raw = analogRead(pin);
-  float voltage = (raw / 4095.0) * 3.3;
-  return voltage;
+// Função para gerar valores randômicos float
+float randFloat(float minVal, float maxVal) {
+  return minVal + (float)random(0, 10000) / 10000.0 * (maxVal - minVal);
 }
 
 void setup() {
   Serial.begin(115200);
-  WiFi.begin(ssid,password);
-  Serial.print("Conectando WiFi");
-  while (WiFi.status() != WL_CONNECTED) { delay(500); Serial.print("."); }
-  Serial.println("OK");
+  WiFi.begin(ssid, password);
 
-  sensors.begin();
-  pinMode(PIN_ANEM, INPUT_PULLUP);
-  pinMode(PIN_PLUV, INPUT_PULLUP);
-  attachInterrupt(digitalPinToInterrupt(PIN_ANEM), anemISR, RISING);
-  attachInterrupt(digitalPinToInterrupt(PIN_PLUV), pluvISR, RISING);
+  Serial.println("Conectando ao Wi-Fi...");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(1000);
+    Serial.print(".");
+  }
+
+  Serial.println("Wi-Fi conectado!");
 }
 
 void loop() {
-  // Leitura sensores
-  sensors.requestTemperatures();
-  float temperatura_solo = sensors.getTempCByIndex(0); // DS18B20
-
-  float soil_cap_voltage = readADC(PIN_SOIL_CAP); // converter p/ % com calibração
-  float umidade_solo = map(soil_cap_voltage*1000, 300, 2000, 100, 0); // exemplo (calibrar)
-
-  float ph_voltage = readADC(PIN_PH);
-  float ph = (ph_voltage * 3.5); // placeholder; calibrar com fórmula e pontos
-
-  float ec_voltage = readADC(PIN_EC);
-  float condutividade_solo = ec_voltage * 1.5; // placeholder
-
-  float rad_voltage = readADC(PIN_RAD);
-  float radiacao_solar = rad_voltage * 500.0; // placeholder
-
-  // Anemômetro: conversão de pulsos -> velocidade (depende do sensor)
-  int pulses = anem_pulses;
-  anem_pulses = 0;
-  float velocidade_vento = pulses * 0.5; // placeholder
-
-  int pluvi = pluv_pulses;
-  pluv_pulses = 0;
-  float pluviometria_mm = pluvi * 0.2794; // ex: cada pulso = 0.2794 mm (calibrar)
-
-  // Temperatura e umidade do ar e pressão via BMP/BME (I2C)
-  float temperatura_ar = 26.0; // colocar leitura real do BME280/BMP280
-  float pressao = 1012.0;
-  float altitude = 600.0;
-  float umidade_relativa = 65.0;
-  float indice_uv = 3.0;
-  float npk_n = 35.0, npk_p = 18.0, npk_k = 40.0; // se tiver sensor NPK (ou calcular por amostra)
-  float altura_planta = 30.0, biomassa_estimada = 1.2, area_foliar_lai = 2.1;
-
-  String json = "{";
-  json += "\"latitude\": -23.10,";
-  json += "\"longitude\": -47.20,";
-  json += "\"temperatura_solo\":" + String(temperatura_solo) + ",";
-  json += "\"umidade_solo\":" + String(umidade_solo) + ",";
-  json += "\"condutividade_solo\":" + String(condutividade_solo) + ",";
-  json += "\"ph\":" + String(ph) + ",";
-  json += "\"npk_n\":" + String(npk_n) + ",";
-  json += "\"npk_p\":" + String(npk_p) + ",";
-  json += "\"npk_k\":" + String(npk_k) + ",";
-  json += "\"temperatura_ar\":" + String(temperatura_ar) + ",";
-  json += "\"pressao\":" + String(pressao) + ",";
-  json += "\"altitude\":" + String(altitude) + ",";
-  json += "\"umidade_relativa\":" + String(umidade_relativa) + ",";
-  json += "\"radiacao_solar\":" + String(radiacao_solar) + ",";
-  json += "\"indice_uv\":" + String(indice_uv) + ",";
-  json += "\"velocidade_vento\":" + String(velocidade_vento) + ",";
-  json += "\"pluviometria_mm\":" + String(pluviometria_mm) + ",";
-  json += "\"altura_planta\":" + String(altura_planta) + ",";
-  json += "\"biomassa_estimada\":" + String(biomassa_estimada) + ",";
-  json += "\"area_foliar_lai\":" + String(area_foliar_lai) + ",";
-  json += "\"cultura\":\"Soja\",";
-  json += "\"estagio_fenologico\":\"V3\",";
-  json += "\"data_plantio\":\"2025-01-10\"";
-  json += "}";
-
-  // Envia via HTTP
   if (WiFi.status() == WL_CONNECTED) {
     HTTPClient http;
+
     http.begin(serverName);
     http.addHeader("Content-Type", "application/json");
-    int code = http.POST(json);
-    Serial.println("POST -> code: " + String(code));
+
+    // Simulação dos dados
+    String json = "{";
+    json += "\"latitude\":" + String(randFloat(-23.0, -22.0)) + ",";
+    json += "\"longitude\":" + String(randFloat(-47.0, -46.0)) + ",";
+
+    json += "\"temperatura_solo\":" + String(randFloat(18, 30)) + ",";
+    json += "\"umidade_solo\":" + String(randFloat(10, 50)) + ",";
+    json += "\"condutividade_solo\":" + String(randFloat(0.1, 1.5)) + ",";
+    json += "\"ph\":" + String(randFloat(5.0, 7.5)) + ",";
+    json += "\"npk_n\":" + String(randFloat(20, 70)) + ",";
+    json += "\"npk_p\":" + String(randFloat(10, 40)) + ",";
+    json += "\"npk_k\":" + String(randFloat(20, 60)) + ",";
+
+    json += "\"temperatura_ar\":" + String(randFloat(15, 35)) + ",";
+    json += "\"pressao\":" + String(randFloat(950, 1050)) + ",";
+    json += "\"altitude\":" + String(randFloat(500, 800)) + ",";
+    json += "\"umidade_relativa\":" + String(randFloat(40, 90)) + ",";
+    json += "\"radiacao_solar\":" + String(randFloat(200, 1200)) + ",";
+    json += "\"indice_uv\":" + String(randFloat(1, 11)) + ",";
+    json += "\"velocidade_vento\":" + String(randFloat(0, 15)) + ",";
+    json += "\"pluviometria_mm\":" + String(randFloat(0, 20)) + ",";
+
+    json += "\"altura_planta\":" + String(randFloat(5, 120)) + ",";
+    json += "\"biomassa_estimada\":" + String(randFloat(0.1, 5.0)) + ",";
+    json += "\"area_foliar_lai\":" + String(randFloat(1.0, 6.0)) + ",";
+
+    json += "\"cultura\":\"Soja\",";
+    json += "\"estagio_fenologico\":\"V3\",";
+    json += "\"data_plantio\":\"2025-01-10\"";
+
+    json += "}";
+
+    int resposta = http.POST(json);
+
+    Serial.println("Enviando dados...");
+    Serial.println(json);
+    Serial.println("Resposta HTTP: " + String(resposta));
+
     http.end();
   }
-  delay(60000); // intervalo
+
+  delay(60000); // envia a cada 60 segundos
 }
